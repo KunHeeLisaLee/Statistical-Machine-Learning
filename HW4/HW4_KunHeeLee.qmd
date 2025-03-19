@@ -1,0 +1,361 @@
+---
+title: "Statistical Machine Learning - HW4"
+author: "Kun Hee (Lisa) Lee (andrewID: kunheel)"
+format:
+  pdf:
+    number-sections: true
+    fig-cap: true
+    colorlinks: true
+    indent: true
+    linestretch: 1.15
+    fontsize: 12pt
+    geometry: "left=1in, right=1in, top=1in, bottom=1in"
+---
+
+```{r, echo=FALSE}
+library(MASS);library(tinytex);library(e1071)
+```
+
+# LDA
+```{r}
+load("zip.014.Rdata")
+```
+
+```{r}
+plot.digit <- function(x, zlim = c(-1, 1)) {
+       cols <- gray.colors(100)[100:1]
+       image(matrix(x, nrow = 16)[, 16:1], col = cols,
+             zlim = zlim, axes = FALSE)
+}
+
+plot.digit(x.014.tr[5,])
+```
+
+
+## (a) Perform LDA
+```{r}
+model_lda <- lda(y.014.tr ~ ., data = data.frame(y.014.tr, x.014.tr))
+Z_train = x.014.tr %*% model_lda$scaling
+
+plot(Z_train, col = y.014.tr + 1, pch = as.character(y.014.tr),
+     xlab = "LDA Dimension 1", ylab = "LDA Dimension 2",
+     main = "LDA Transformed Space")
+legend("topright", legend = c("0", "1", "4"), col = 1:3, pch = 16)
+```
+
+Dimension p = 256, because each digitized image is a 16 x 16 pixel grid, 
+which results in 256 features when unraveled into a vector. 
+
+## (b) Predict the labels
+```{r}
+pred <- predict(model_lda, newdata = data.frame(x.014.te))
+
+error_rate <- mean(pred$class != y.014.te)
+print(error_rate)
+```
+
+It shows that the misclassification rate is about 0.02 (2%).
+
+## (c) Plotting the training vs test data
+```{r}
+Z_test <- x.014.te %*% model_lda$scaling
+
+misclassified <- pred$class != y.014.te
+
+par(mar=c(4,4,2,1))
+plot(Z_train, col = y.014.tr + 1, pch = as.character(y.014.tr), 
+     main = "LDA: Training and Test Data")
+points(Z_test, col = ifelse(misclassified, "purple", "green"), pch = 3)
+
+legend("topright", legend = c("True", "Misclassified"), 
+       col = c("green", "purple"), pch = c(3, 3))
+```
+
+## (d) Identifying misclassified observations
+```{r}
+# mis_points <- identify(Z_test[,1], Z_test[,2], labels = as.character(y.014.te))
+
+# After executing from the console, I manually put the indices below
+mis_points <- c(200, 213, 346, 618)
+```
+
+```{r}
+plot.digit <- function(x, zlim = c(-1, 1)) {
+  cols <- gray.colors(100)[100:1]
+  image(matrix(x, nrow = 16)[, 16:1], col = cols, zlim = zlim, axes = FALSE)
+}
+
+par(mfrow = c(2, length(mis_points)/2), mar=c(4,4,2,1))  
+
+for (i in mis_points) {
+  plot.digit(x.014.te[i,])
+  title(paste("True:", y.014.te[i], "Pred:", pred$class[i]))
+}
+
+```
+From the plots above, I can conclude that the misclassification mistakes are 
+generally understandable. Assuming the plots are numbered from 1 to 4 (from top 
+left to bottom right), I find that plots 2 and 3 are particularly challenging to 
+classify correctly, even by eye. These digits contain redundant curves, which 
+might confuse both me and the LDA classifier. However, I think plot 4 is
+un-excusable mistake.
+
+
+# Hinge Loss and SVMs
+
+## (a) Getting rid of normalization constraint
+
+i. As we assumed that the hyperplane is not normalized, the distance between
+the hyperplane $\beta_0 + x^T \beta = 0$ and z is:
+
+$$\rho = \frac{|\beta_0 + z^T \beta|}{||\beta||_2}$$
+
+ii. Among the given SVM formula, $y_i (\beta_0 + x_i^T \beta) \geq M (1 - \epsilon_i)$
+would be changed when we remove the norm constraint. Using the above calculation,
+dividing the $y_i (\beta_0 + x_i^T \beta)$ by $||\beta||_2$ will be the form. Therefore,
+the SVM formulation becomes:
+
+$$y_i (\beta_0 + x_i^T \beta) \geq M (1 - \epsilon_i) ||\beta||_2$$
+
+iii. Let $(\beta, \beta_0)$ is a solution of the form 1a. If 
+
+$$\beta' = k \beta, \beta_0' = k \beta_0, (k >0)$$, the inequality becomes:
+
+$$y_i (\beta_0' + x_i^T \beta') \geq M (1 - \epsilon_i) ||\beta'||_2$$
+Since norm scaling works as: $||\beta'||_2 = ||k \beta||_2 = k ||\beta||_2$
+and $||\beta_0'||_2 = ||k \beta_0||_2 = k ||\beta_0||_2$, 
+the form 1a becomes: 
+$$y_i (k ||\beta_0||_2 + x_i^T k ||\beta||_2) \geq M (1 - \epsilon_i) k ||\beta||_2$$
+By diving both sides by k (k>0), the form is becomes identical to the original
+inequality, indicating that it is "invariant". 
+
+iv. As $M \times ||\beta||_2 = 1$, we can substitute $M = \frac{1}{||\beta||_2}$.
+Also, we can switch the "maximize" to a "minimize" because now $M$ is expressed
+as a fraction with $||\beta||_2$ on its denominator. After substituting, we can 
+derive form 2:
+$$y_i (\beta_0 + x_i^T \beta) \geq (1 - \epsilon_i) $$
+
+v. As our formula no longer includes $M$, now $||\beta||_2$ encodes the 
+information about the width of the margin. More specifically, regarding the 
+relationship between $M$ and $||\beta||_2$, larger margin corresponds to a 
+smaller $||\beta||_2$.
+
+vi. From form1, we had: $M = \frac{1}{||\beta||_2}$. After multiplying both 
+sides by $\beta$, it becomes: $M \beta = \frac{\beta}{||\beta||_2}$.
+Since $\frac{\beta}{||\beta||_2}$ is a unit vector with the direction of $\beta$,
+we can see that:
+
+$$\beta_{form2} = M_{form1} \cdot \beta_{form1}$$
+This implies that the $\beta$s of form1 and form2 are proportional. 
+
+## (b) Adding a term to the objective function 
+
+i. From part a), we derived form2 as:
+$$y_i (\beta_0 + x_i^T \beta) \geq (1 - \epsilon_i) $$
+As we also checked that this form implies minimizing $||\beta||_2$,
+we can derive a new form3 as:
+$$\min_{\beta, \beta_0} \frac{1}{2} ||\beta||_2^2 + D \sum_{i=1}^{n} \epsilon_i, \epsilon_i \geq 0$$
+
+By doing this, now we can remove the constraint $\sum_{i=1}^{n} \epsilon_i \leq C$.
+
+ii. As the form2 and the form3 are equivalent reformulations, for any C in form2
+exists a D in form3 that gives the same solution to the optimization problem. 
+We have already showed why the form2 and the form3 are equivalent from the previous
+part.
+
+iii. If we make C bigger in form2, then the D in form3 decreases because a larger
+C indicates that we allow more misclassification. A higher C leads to a less 
+strict decision boundary. 
+
+
+## (c) Identifying misclassified observations
+
+i. From the previous part, we derived form2 and form3 as:
+$$y_i (\beta_0 + x_i^T \beta) \geq (1 - \epsilon_i) $$
+$$\min_{\beta, \beta_0} \frac{1}{2} ||\beta||_2^2 + D \sum_{i=1}^{n} \epsilon_i, \epsilon_i \geq 0$$
+Focusing on $\epsilon_i$, we can rewrite these as two inequality constraints on
+$\epsilon_i$:
+$$\epsilon_i \geq 0$$   and $$\epsilon_i \geq 1 - y_i (\beta_0 + x_i^T \beta)$$
+
+ii. Using the 'positive part' function introduced in hint, I can rewrite the 
+above $\epsilon_i$-related constraints as: $(1 - y_i (\beta_0 + x_i^T \beta))+$
+
+iii. Substituting $\epsilon_i = (1 - y_i (\beta_0 + x_i^T \beta))+$ into the objective 
+function, we can derive form4: 
+
+$$\min_{\beta, \beta_0} \frac{1}{2} ||\beta||_2^2 + D \sum_{i=1}^{n} (1 - y_i (\beta_0 + x_i^T \beta))+$$
+
+iv. To make the above formula similar to the one we learned in class (slide 20
+of class 9), I defined $\lambda = \frac{1}{D}$
+Therefore, our formula becomes:
+$$\min_{\beta, \beta_0} \frac{1}{2} ||\beta||_2^2 + \frac{1}{\lambda} \sum_{i=1}^{n} (1 - y_i (\beta_0 + x_i^T \beta))+$$
+
+v. From the above formula, we observe that as C increases, D (from form4) 
+decreases, indicating a lower penalty for misclassification. Also, as I defined 
+$\lambda = \frac{1}{D}$, $\lambda$ increases. Higher $\lambda$ makes the decision
+boundary more stable. As $||\beta||_2^2$ represents margin control, higher C and 
+increased $\lambda$ will reduce $||\beta||_2$, meaning the margin becomes wider. 
+
+# Fitting an SVM to circle data
+
+```{r}
+## 36-462/662; Assignment 4
+##
+## Data generation script to accompany problem 3
+##
+## We generate a data set for fitting via SVMs
+##   with both training and testing sets created automatically
+##   and a couple (base R) preliminary plots
+
+get_circle_data <- function(n){
+  X <- matrix(rnorm(2 * n), ncol = 2)
+  Y <- as.numeric(X[, 1]^2 + X[, 2]^2 < 1)
+  data.frame(x1 = X[, 1], 
+             x2 = X[, 2], 
+             y = as.factor(ifelse(Y == 1, 1, -1)))  
+}
+# Note: we needed y to be a factor for the svm package 
+#   to understand we want to do classification, not regression
+
+library(e1071)
+set.seed(2025)
+
+train <- get_circle_data(100)
+test  <- get_circle_data(1000)
+
+#Plot the training and test data.  Color the data points by class.
+par(mfrow = c(1, 2))
+plot(train$x1, train$x2, 
+     pch = as.numeric(train$y) + 15, col = train$y, main = "Training data")
+plot(test$x1,  test$x2, 
+     pch = as.numeric(test$y) + 15,  col = test$y,  main = "Testing data")
+```
+
+## (a) Fitting SVM with a linear kernel
+```{r}
+model_linear <- svm(y ~ ., data = train, kernel = "linear", cost = 1e7)
+
+plot(model_linear, train, main = "SVM with Linear Kernel")
+```
+
+From the plot above, I can observe that the linear kernel was a poor choice. 
+As we are training with circle data, I believe linear classifier does not perform
+well. 
+
+```{r}
+pred_linear <- predict(model_linear, newdata = test)
+
+error_rate <- mean(pred_linear != test$y)
+print(error_rate)
+```
+
+The misclassification rate is 0.501, again allowing us to check that the linear
+kernel does not fit well in this case. 
+
+
+## (b) Fitting SVM with a polynomial(degree=3) kernel
+```{r}
+model_poly <- svm(y ~ ., data = train, kernel = "polynomial", cost = 1e7)
+
+plot(model_poly, train)
+```
+
+```{r}
+pred_poly <- predict(model_poly, newdata = test)
+
+error_rate <- mean(pred_poly != test$y)
+print(error_rate)
+```
+
+Based on the plot and the error rate above, I can observe that the polynomial
+kernel even performs worse than the linear kernel. This classifier does not fit
+with our circle data. 
+
+
+## (c) Fitting SVM with a polynomial(degree=2) kernel
+```{r}
+model_poly2 <- svm(y ~ ., data = train, kernel = "polynomial", 
+                   degree=2, cost = 1000)
+
+plot(model_poly2, train)
+```
+
+```{r}
+pred_poly2 <- predict(model_poly2, newdata = test)
+
+error_rate <- mean(pred_poly2 != test$y)
+print(error_rate)
+```
+
+From the above plot and the error rate above, I can observe that this classifier,
+degree = 2 polynomial kernel performs very well at our data. Its misclassification
+rate was about 0.015, meaning that only 15 out of 1000 points are mismatched.
+
+## (d) Tuning parameters
+```{r}
+model_poly2_tune <- tune(svm, y ~ ., data = train, kernel = "polynomial", 
+                         degree = 2, 
+                         ranges = list(cost = c(1000, 1e4, 1e5, 1e6, 1e7, 1e8),
+                         gamma = c(0.001, 0.005, 0.01, 0.05, 0.1, 1)))
+best_model <- model_poly2_tune$best.model
+c(best_model$cost, best_model$gamma)
+
+
+plot(best_model, train)
+```
+
+Our best model takes 1e+06 as its cost parameter and 0.001 (1e-03) as its 
+gamma parameter. 
+
+```{r}
+pred_poly2_tune <- predict(best_model, newdata = test)
+
+error_rate <- mean(pred_poly2_tune != test$y)
+print(error_rate)
+```
+
+The misclassification rate of this best model is 0.047, a bit higher than 
+that of our initial, un-tuned model with degree 2.
+
+
+## (e) Fitting SVM with a RBF kernel
+```{r}
+model_rbf <- svm(y ~ ., data = train, kernel = "radial", cost = 1000)
+
+plot(model_rbf, train)
+```
+
+```{r}
+pred_rbf <- predict(model_rbf, newdata = test)
+
+error_rate <- mean(pred_rbf != test$y)
+print(error_rate)
+```
+
+Based on the plot and the result above, I can observe that the RBF kernel
+performs as same as our best model derived after tuning parameters. 
+
+
+## (f) Tuning parameters for RBF 
+```{r}
+model_rbf_tune <- tune(svm, y ~ ., data = train, kernel = "radial", 
+                  ranges = list(cost = c(0.1, 1, 10, 100, 1000, 1e4, 1e5, 1e6),
+                  gamma = c(0.01, 0.05, 0.1, 0.5, 1, 2, 3)))
+best_model <- model_rbf_tune$best.model
+c(best_model$cost, best_model$gamma)
+
+
+plot(best_model, train)
+```
+Our best model for RBF takes 1e+04 as its cost parameter and 0.1 (1e-01) as its 
+gamma parameter. 
+
+```{r}
+pred_rbf_tune <- predict(best_model, newdata = test)
+
+error_rate <- mean(pred_rbf_tune != test$y)
+print(error_rate)
+```
+
+The misclassification rate of this best model is 0.039, a bit higher than 
+that of our initial, un-tuned model with rbf kernel.

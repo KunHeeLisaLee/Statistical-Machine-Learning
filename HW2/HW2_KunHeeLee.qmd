@@ -1,0 +1,281 @@
+---
+title: "Statistical Machine Learning - HW2"
+author: "Kun Hee (Lisa) Lee (andrew ID: kunheel)"
+format:
+  pdf:
+    number-sections: true
+    fig-cap: true
+    colorlinks: true
+    indent: true
+    linestretch: 1.15
+    fontsize: 12pt
+    geometry: "left=1in, right=1in, top=1in, bottom=1in"
+---
+
+```{r}
+library(tinytex);library(MASS);library(glmnet);library(ISLR);library(ggplot2)
+```
+
+# Best classification when the losses are asymmetric
+
+## (a)
+
+Using the fact that I derived from the previous assignment,
+
+$P(Y=1 | X=x) > \frac{L_{10}}{L_{01} + L_{10}}$ when assuming the losses are asymmetric.
+
+(Originally, the numerator was $L_{01}$, but since the definition given
+
+in the question has changed, I also changed the numerator to $L_{10}$.)
+
+Therefore, the decision rule becomes:
+
+$f(x) = 1$ if $P(Y=1 | X=x) > \frac{L_{10}}{L_{01} + L_{10}}$ and $f(x) = 0$ otherwise.
+
+For logistic regression,
+
+$P(Y=1 | X=x) = \frac{1}{1+e^{-x^\top\beta}}$
+
+We can derive the threshold for the decision boundary as:
+
+$x^\top\beta = \log \left( \frac{\frac{L_{10}}{L_{01} + L_{10}}}{1 - \frac{L_{10}}{L_{01} + L_{10}}} \right) = \log \left( \frac{\frac{L_{10}}{L_{01} + L_{10}}}{\frac{L_{01}}{L_{01} + L_{10}}} \right) = \log \left( \frac{L_{10}}{L_{01}} \right)$
+
+Assuming $L_{10} > L_{01}$, this boundary makes the classifier more conservative
+
+in predicting Y = 1.
+
+## (b)
+
+i.  Using the training data, we can fit the logistic regression model by obtaining
+
+estimates of $\hat{\beta}$. This is done by maximizing the log-likelihood function:
+
+$l(\beta) = \sum_{i=1}^n \log P(Y = y_i \mid X = x_i) = \sum_{i=1}^n \left\{y_i \cdot (x_i^\top \beta) - \log \left( 1 + e^{x_i^\top \beta} \right) \right\}$
+
+ii. Once we derived $\hat{\beta}$, we can predict the probability for a new
+
+example x using the logistic function:
+
+$P(Y=1 | X=x) = \frac{1}{1+e^{-x^\top\beta}}$
+
+iii. The decision boundary of the estimated classifier is
+
+$x^\top\beta = \log \left( \frac{\frac{L_{10}}{L_{01} + L_{10}}}{1 - \frac{L_{10}}{L_{01} + L_{10}}} \right) = \log \left( \frac{\frac{L_{10}}{L_{01} + L_{10}}}{\frac{L_{01}}{L_{01} + L_{10}}} \right) = \log \left( \frac{L_{10}}{L_{01}} \right)$
+
+# Decision boundaries
+
+## (a) 1D Dataset
+
+i.  
+
+```{r}
+set.seed(0127)
+n <- 100
+y <- rbinom(n, 1, 0.5) # randomly assign 0 or 1
+x <- ifelse(y==0, runif(n, -1, 0), runif(n, 0, 1))
+data_1d <- data.frame(x=x, y=y)
+head(data_1d)
+```
+
+ii. 
+
+```{r}
+logistic_model <- glm(y ~ x, family = binomial, data_1d) # fit logistic regression 
+summary(logistic_model)
+```
+
+iii. After fitting the model, I can see the warnings:
+
+```{r}
+#Warning: glm.fit: algorithm did not converge
+#Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+```
+
+These warnings indicate that the algorithm did not converge and that some fitted 
+probabilities are numerically 0 or 1. This issue arises because the data is perfectly 
+separable. In this case, logistic regression struggles because the coefficients 
+grow infinitely large in an attempt to separate the classes perfectly. As a result,
+the optimization algorithm cannot find a finite solution.
+
+iv. 
+
+```{r}
+data_1d$prob <- predict(logistic_model, type="response")
+ggplot(data_1d, aes(x=x, y=prob, color=as.factor(y))) +
+  geom_point() +
+  geom_line(aes(y=prob), color="orange") +
+  labs(color ="True Value") +
+  ggtitle("Predicted Probabilities for 1D Logistic Regression")
+```
+
+From the plot above, I observe that the predicted probabilities are only 0 or 1,
+not spread between 0 and 1.
+
+## (b) 2D dataset
+
+```{r}
+library(MASS) 
+set.seed(100)
+n <- 100
+c1_prob <- 0.8
+X <- matrix(0, nrow = n, ncol = 2)
+y <- matrix(0, nrow = n, ncol = 1)
+for (i in 1:n) {
+  if (runif(1) < c1_prob) {
+    X[i,] <- mvrnorm(1, mu = c(2, 2), Sigma = matrix(c(1, 0, 0, 1), 2, 2))
+    y[i] <- 1
+  } else {
+    X[i,] <- mvrnorm(1, mu = c(-2, -2), Sigma = matrix(c(1, 0, 0, 1), 2, 2))
+    y[i] <- 0
+  }
+}
+```
+
+i.  
+
+```{r}
+data_2d <- data.frame(X1 = X[, 1], X2 = X[, 2], y = as.factor(y))  
+
+ggplot(data_2d, aes(x = X1, y = X2, color = y)) +
+  geom_point(size = 2) +  
+  labs(color="Class Label") +
+  labs(title = "2D Logistic Regression Data", x = "X1", y = "X2") 
+```
+
+ii. 
+
+```{r}
+logistic_model2 <- glm(y ~ X1 + X2, family = binomial, data_2d) # fit logistic regression 
+summary(logistic_model2)
+```
+
+Same as dealing with 1D dataset, it shows the warnings:
+
+```{r}
+#Warning: glm.fit: algorithm did not converge
+#Warning: glm.fit: fitted probabilities numerically 0 or 1 occurred
+```
+
+iii. 
+
+```{r}
+glm.fit <- glmnet(X, y, family = "binomial", nlambda = 1, lambda = 0.001)
+glm.fit
+```
+
+iv. 
+
+```{r}
+beta_unreg <- coef(logistic_model2)
+beta_reg <- coef(glm.fit, s=0.001)
+
+intercept_unreg <- -beta_unreg[1] / beta_unreg[3]
+slope_unreg <- -beta_unreg[2] / beta_unreg[3]
+intercept_reg <- -beta_reg[1] / beta_reg[3]
+slope_reg <- -beta_reg[2] / beta_reg[3]
+
+decision_boundaries <- data.frame(
+  intercept = c(intercept_unreg, intercept_reg),
+  slope = c(slope_unreg, slope_reg),
+  Type = c("Unregularized", "Regularized")
+)
+
+ggplot(data_2d, aes(x = X1, y = X2, color = y)) +
+  geom_point(size = 2) +  
+  labs(color="Class Label") +
+  labs(title = "2D Logistic Regression Data", x = "X1", y = "X2") +
+  geom_abline(data = decision_boundaries, aes(intercept = intercept, slope = slope, 
+                                color = Type, linetype= Type), linewidth = 1) +
+  guides(linetype = "none")
+  
+```
+
+## (c) 2D dataset - Default data
+
+```{r}
+data(Default)
+head(Default)
+
+Default$default2 <- ifelse(Default$default == "Yes", 1, 0)
+logistic_model3 <- glm(default2 ~ balance + income, family = binomial, 
+                       data = Default)
+glm.fit2 <- glmnet(as.matrix(Default[,c("balance", "income")]), 
+                   Default$default2, family = "binomial", nlambda = 1, 
+                   lambda = 0.001)
+```
+
+```{r}
+beta_unreg2 <- coef(logistic_model3)
+beta_reg2 <- coef(glm.fit2, s=0.001)
+
+intercept_unreg <- -beta_unreg2[1] / beta_unreg2[3]
+slope_unreg <- -beta_unreg2[2] / beta_unreg2[3]
+intercept_reg <- -beta_reg2[1] / beta_reg2[3]
+slope_reg <- -beta_reg2[2] / beta_reg2[3]
+
+decision_boundaries <- data.frame(
+  intercept = c(intercept_unreg, intercept_reg),
+  slope = c(slope_unreg, slope_reg),
+  Type = c("Unregularized", "Regularized") 
+)
+
+ggplot(Default, aes(x = balance, y = income, color = as.factor(default2))) +
+  geom_point(size = 2) +  
+  labs(color="Default") +
+  labs(title = "2D Logistic Regression Default Data", x = "Balance", y = "Income") +
+  geom_abline(data = decision_boundaries, aes(intercept = intercept, slope = slope, 
+                                color = Type, linetype = Type), linewidth = 1) +
+  guides(linetype = "none")
+```
+
+# Prediction with marketing data
+
+```{r}
+marketing = read.csv('marketing.csv')
+head(marketing)
+
+set.seed(1)
+idx.test <- sample(1:nrow(marketing), floor(0.3*nrow(marketing)))
+test     <- marketing[idx.test, ]
+train    <- marketing[-idx.test, ]
+```
+
+## (a) Naive Classifier
+
+```{r}
+train_accuracy <- sum(train$y == "no") / nrow(train)
+test_accuracy <- sum(test$y == "no") / nrow(test)
+c(train_accuracy, test_accuracy)
+```
+
+Accuracy is 0.8846373 for the training data and 0.8792303 for the test data.
+
+## (b) Fit Logistic Regression Model
+
+```{r}
+logistic_model4 <- glm(as.factor(y) ~ ., family = binomial, data = train)
+
+train$predict_prob <- predict(logistic_model4, type = "response")
+test$predict_prob <- predict(logistic_model4, newdata = test, type = "response")
+
+train$predict_label <- ifelse(train$predict_prob > 0.5, "yes", "no")
+test$predict_label <- ifelse(test$predict_prob > 0.5, "yes", "no")
+
+train_accuracy <- sum(train$predict_label == train$y) / nrow(train)
+test_accuracy <- sum(test$predict_label == test$y) / nrow(test)
+c(train_accuracy, test_accuracy)
+```
+
+The accuracy of the logistic regression model is the same as that of the naive classifier: 0.8846373 for the training data and 0.8792303 for the test data. This outcome is discouraging because the logistic regression model considers all covariates, while it does not outperform the naive classifier in terms of accuracy.
+
+## (c)
+
+```{r}
+test_ordered <- test[order(-test$predict_prob), ]
+test_1000 <- head(test_ordered, 1000)
+test_1000_accuracy <- sum(test_1000$y == "yes") / nrow(test_1000)
+test_overall_accuracy <- sum(test$y == "yes") / nrow(test)
+c(test_1000_accuracy, test_overall_accuracy)
+```
+
+The accuracy of predicting "yes" among the top 1,000 clients is 0.319, compared to 0.1207697 when selecting 1,000 clients randomly. From this, I can understand that the logistic regression model is effective and useful.

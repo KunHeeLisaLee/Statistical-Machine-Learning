@@ -1,0 +1,112 @@
+---
+title: "Statistical Machine Learning - HW7"
+author: "Kun Hee (Lisa) Lee (andrewID: kunheel)"
+format:
+  pdf:
+    number-sections: true
+    fig-cap: true
+    colorlinks: true
+    indent: true
+    linestretch: 1.15
+    fontsize: 12pt
+    geometry: "left=1in, right=1in, top=1in, bottom=1in"
+---
+
+# Linear Algebra
+
+We want to show that the top eigenvector of the covariance matrix is the 
+direction of maximum variance.
+
+Based on the instruction, we assume that $v_1$ is the top eigenvector.
+
+The eigenvalue decomposition of the covariance matrix is:
+
+$\hat{\Sigma} = V D V^T$ 
+
+where $V = [v_1, \dots, v_p]$ and $D$: diagonal
+matrix. 
+
+Since eigenvectors form a basis, any unit vector $v$ can be expressed as: 
+
+$v = \sum_{i=1}^{p} \alpha_i v_i$ where $\sum_{i=1}^{p} \alpha_i^2 = 1$
+
+Multiplying both sides by $\hat{\Sigma}$:
+
+$\hat{\Sigma} v = \sum_{i=1}^{p} \alpha_i \hat{\Sigma} v_i = \sum_{i=1}^{p} \alpha_i d_i v_i$
+
+Taking the quadratic form:
+
+$v^T\hat{\Sigma} v = \left( \sum_{i=1}^{p} \alpha_i v_i\right)^T \Sigma \left( \sum_{i=1}^{p} \alpha_i v_i\right)$
+
+Since eigenvectors satisfy:
+
+$v_i^T \hat{\Sigma} v_j = d_i \delta_{ij}$, 
+
+we get: $v^T \hat{\Sigma} v = \sum \alpha_i^2 d_i$
+
+Since $d_1$ is the largest eigenvalue, the maximum variance occurs when:
+
+$\alpha_1 = 1, \alpha_2 = \alpha_3 = \dots \alpha_p = 0$
+
+Thus, the maximum value of $v^T \hat{\Sigma} v$ is:
+
+$v^T \hat{\Sigma} v = d_1$
+
+For any other unit vector $v$:
+
+$v^T \hat\Sigma v = \sum \alpha_i^2 d_i < d_1 \Sigma \alpha_i^2 = d_1$
+
+In words, this shows that $v_1^T \hat \Sigma v_1 > v^T \hat\Sigma v$ is satisfied
+for any unit vector $v \neq v_1$.
+
+# PCA for Character Recognition 
+
+```{r}
+load("writtenNumbers.Rdata") 
+dim(threesevens)
+```
+
+## (a)
+```{r}
+pca <- prcomp(threesevens, center = TRUE, scale. = TRUE)
+#head(pca$x, 2)
+#head(pca$rotation, 2)
+
+# Plot PC1 vs PC2
+plot(pca$x[,1], pca$x[,2], col=ifelse(as.factor(label) == "3", "blue", "red"),
+     xlab = "PC1", ylab = "PC2", main = "PCA of First Two Principal Components")
+legend("topright", legend = c("3", "7"), col = c("blue", "red"), pch = 1)
+
+```
+From the plot above, I observe that the points corresponding to digits "3" and "7" are well-separated along the PC1) making them distinguishable. Specifically, the group of "3"s tends to have negative PC1 values, while the group of "7"s has positive PC1 values. In contrast, along the PC2, both groups exhibit similar behavior. Therefore, this suggests that PCA effectively captures the key differences between these two digits, making them easier to distinguish in lower dimensions.
+
+
+## (b)
+```{r}
+prop_var <- pca$sdev^2 / sum(pca$sdev^2)
+cum_variance <- cumsum(prop_var)
+
+plot(cum_variance, type="b", xlab="Number of Principal Components", 
+     ylab="Cumulative Proportion of Variance Explained",
+     main="Variance Explained by Principal Components")
+abline(h=0.50, col="blue", lty=2)
+abline(h=0.90, col="blue", lty=2)
+abline(v=which(cum_variance >= 0.5)[1], col="blue", lty=2)
+abline(v=which(cum_variance >= 0.9)[1], col="blue", lty=2)
+
+axis(1, at=c(which(cum_variance >= 0.5)[1], which(cum_variance >= 0.9)[1]), 
+     labels=c("k=9", "k=66"), col.axis="blue", las=1)
+axis(2, at=c(0.50, 0.90), labels=c("0.50", "0.90"), col.axis="blue", las=1)
+
+```
+We need 9 principal components to explain at least 50% of the variance.
+We need 66 principal components to explain at least 90% of the variance.
+
+
+## (c)
+```{r}
+plot(pca$sdev^2, type="b", xlab="Principal Component", 
+     ylab="Eigenvalue", main="Scree Plot")
+```
+
+By visually inspecting the scree plot, I believe the elbow occurs around the eighth principal component. Up to this point, the curve shows a steep decline, indicating that these components capture most of the variance. After this point, the slope flattens, suggesting that additional components contribute only marginally to the explained variance. 

@@ -1,0 +1,216 @@
+---
+title: "Statistical Machine Learning - HW8"
+author: "Kun Hee (Lisa) Lee (andrewID: kunheel)"
+format:
+  pdf:
+    number-sections: true
+    fig-cap: true
+    colorlinks: true
+    indent: true
+    linestretch: 1.15
+    fontsize: 12pt
+    geometry: "left=1in, right=1in, top=1in, bottom=1in"
+---
+
+# k-means
+```{r}
+my.kmeans = function(x, centers = NULL, k = NULL, maxiter = 20) {
+  n <- nrow(x)
+  p <- ncol(x)
+  # Initialize the centers, unless they were supplied in the function call.
+  #  If the centers were not given, k must be specified so we know how many 
+  #  to randomly choose.
+  if (is.null(centers)) {
+    if (is.null(k)) stop("Either centers or k must be specified.")
+    centers <- matrix(runif(k*p, min(x), max(x)), nrow = k)
+  }
+
+  k <- nrow(centers)
+  
+  cluster <- matrix(0, nrow = 0, ncol = n)
+  cluster.old <- cluster
+  
+  for (iter in 1:maxiter) {
+
+    cluster = rep(0, n)
+    for (i in 1:n){
+      distance <- apply(centers, 1, function(center) sum((x[i, ] - center)^2))
+      cluster[i] <- which.min(distance)
+    }
+      
+    centers = matrix(0, nrow=k, ncol=p)
+    for (j in 1:k){
+      inside_cluster <- x[cluster == j, , drop=FALSE]
+      if (nrow(inside_cluster) == 0){
+        centers[j, ] <- runif(p, min(x), max(x))
+      } else{
+        centers[j, ] <- colMeans(inside_cluster)
+      }
+    }
+      
+    if (iter > 1 & all(cluster == cluster.old)){
+      break
+    }
+    
+    # Keep track of the previous clustering so we can see if it changed
+    cluster.old <-cluster
+  }
+  return(list(centers = centers, cluster = cluster, iter = iter))
+}
+```
+
+```{r}
+# Simple test example:
+set.seed(0)
+x <- rbind(matrix(rnorm(2*100, sd = 0.2), ncol = 2),
+           scale(matrix(rnorm(2*100, sd = 0.3), ncol = 2), 
+                 cent = -c(1, 1), scal = F),
+           scale(matrix(rnorm(2*100, sd = 0.2), ncol = 2), 
+                 cent = -c(0, 1), scal = F))
+
+# Use 3 clusters
+k <- 3
+
+# Initialize the centers
+cent.init <- rbind(c(0.5, 1), c(1, 0), c(0, 0.5))
+
+#Run both algorithms
+km_yours <- my.kmeans(x, centers=cent.init)
+km_truth <- kmeans(x, centers=cent.init, algorithm="Lloyd")
+
+# Tabulate how well the two correspond
+xtabs(~ km_yours$cluster + km_truth$cluster)
+
+# Plot your success!
+nicecolors <- c("#E69F00", "#009E73", "#0072B2", "#CC79A7")
+plot(x[, 1], x[, 2], pch = 20, col = nicecolors[km_yours$cluster])
+points(km_yours$centers, pch = 20, cex = 3, col = nicecolors)
+
+```
+
+
+The table above has non-zero values only along its diagonal, indicating that the clusters from my algorithm match exactly with those from the built-in `kmeans` function. The plot shows the three clusters along with their corresponding centers. I can visually check that
+the clusters are reasonable.
+
+\newpage
+# k-means on Tumor Biopsies
+```{r}
+rm(list = ls())
+
+# Load the data.  NAs were coded as "?"
+dat <- read.csv('breast-cancer-wisconsin.data', header = FALSE, na.strings = "?")
+
+names(dat) <- c(
+  'id',               #Sample code number            id number
+  'thickness',        #Clump Thickness               1 - 10
+  'size_uniformity',  #Uniformity of Cell Size       1 - 10
+  'shape_uniformity', #Uniformity of Cell Shape      1 - 10
+  'adhesion',         #Marginal Adhesion             1 - 10
+  'size',             #Single Epithelial Cell Size   1 - 10
+  'nuclei',           #Bare Nuclei                   1 - 10
+  'chromatin',        #Bland Chromatin               1 - 10
+  'nucleoli',         #Normal Nucleoli               1 - 10
+  'mitoses',          #Mitoses                       1 - 10
+  'class'             #Class:            (2 for benign, 4 for malignant)
+)
+
+# Dropping ID number - we don't want to use this for anything
+dat <- dat[, -1]
+
+# Changing outcome to be descriptive
+dat$class <- ifelse(dat$class == 2, "benign", "malignant")
+
+# Making outcome a factor
+dat$class <- as.factor(dat$class)
+
+# Dropping incomplete observations
+dat <- dat[complete.cases(dat), ]
+
+# Tumor characteristics
+X <- dat[, 1:9]
+
+# Tumor class
+y <- dat[, 10]
+```
+
+```{r}
+## Cluster the tumors based on X
+
+k_tumor <- kmeans(X, centers=2, nstart=10, iter.max =20, algorithm="Lloyd")
+table_tumor <- xtabs(~ k_tumor$cluster + y)
+table_tumor
+```
+```{r}
+total <- sum(table_tumor)
+mis <- table_tumor[1,2] + table_tumor[2,1]
+mis_rate <- mis/total 
+mis_rate
+```
+
+Based on the table above, most points are correctly clustered, with 18 + 9 = 27 mis-classified cases. Assigning the favorable classes as 'Cluster 1 → benign' and 
+'Cluster 2 → malignant', the mis-classification rate is approximately 0.04. 
+This suggests that k-means was fairly effective at recovering the two tumor classes.
+
+
+
+# Hierarchical Clustering
+```{r}
+load("X62_assignment_8_hier_data.RData")
+```
+
+## (a)
+```{r}
+plot(hdata, main="Scatterplot of hdata", pch=20)
+```
+
+```{r}
+d <- dist(hdata, method="euclidean") # compute distance matrix
+hdata_hc <- hclust(d, method="average")
+plot(hdata_hc, main="Hierarchical Clustering of hdata", cex=0.6)
+```
+
+## (b)
+```{r}
+plot(hdata_hc, main="Hierarchical Clustering of hdata", cex=0.6)
+rect.hclust(hdata_hc, k = 7)
+```
+
+From the dendrogram above, I observe that two major groups split off around height 0.6 to 0.8, suggesting two large clusters. Within each of these, further splits occur around height 0.3. The left major group appears to divide into four sub-groups, as the branch lengths and gaps between splits are relatively similar. In contrast, the right major group shows three sub-groups. The first split on the left side of this group is very small and may represent a negligible separation, suggesting that two of its bins should be considered a single cluster. At approximately height 0.1, we can clearly identify four sub-trees on the left and three on the right, confirming a total of seven meaningful sub-groups.
+
+## (c)
+```{r}
+par(mfrow=c(1,2))
+
+for (k in c(2, 4, 7)){
+  hdata_k <- cutree(hdata_hc, k=k)
+  plot(hdata, col=hdata_k, pch=20, main=paste("K=", k))
+  plot(hdata_hc, main=paste("Dendrogram with K=", k))
+  
+  hline <- mean(rev(hdata_hc$height)[(k-1):k])
+  abline(h = hline, col="purple", lty=2)
+}
+```
+
+
+Yes, the hierarchical clustering correctly identifies the major groups and sub-groups, 
+and it aligns with the labeling I described in part (b). At K=2, the clustering splits the data into two major groups, with the cut occurring around the height range I previously mentioned. At K=4, the dendrogram splits one of the major groups into three sub-groups, 
+while the other remains a single cluster. Finally, at K=7, the clustering recovers all seven underlying sub-groups.
+
+## (d)
+```{r}
+hdata_hc_single <- hclust(d, method="single")
+plot(hdata_hc_single, main="Hierarchical Clustering of hdata - single linkage", 
+     cex=0.6)
+```
+
+From the dendrogram above, the group and sub-group structures are not as clear as before, and the clusters appear unbalanced.
+
+```{r}
+for (k in c(2, 7)){
+  hdata_single_k <- cutree(hdata_hc_single, k=k)
+  plot(hdata, col=hdata_single_k, pch=20, main=paste("K=", k))
+}
+```
+
+The results from single linkage are very different from those obtained using average linkage. At K=2, only one point is placed in a separate cluster, while the rest are grouped together, showing a clear imbalance. A similar pattern occurs at K=7, where several clusters (e.g., blue, red, yellow, purple, and sky blue) contain at most two points each, while the remaining clusters are much larger. These are not well-separated clusters. This demonstrates that single linkage performs poorly in this case due to its tendency to create long chains by merging nearby points, which fails to recover the compact group structure present in the data.
+

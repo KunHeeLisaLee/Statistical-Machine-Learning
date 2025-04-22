@@ -27,4 +27,4 @@ Each assignment provided hands-on experience in:
 - HW5: Non-linear feature maps, Kernels, Decision trees
 - HW6: Boosting and Implementing AdaBoost
 - HW7: PCA for Character Recognition
-
+- HW8: k-means, k-means on Tumor Biopsies, Hierarchical Clustering

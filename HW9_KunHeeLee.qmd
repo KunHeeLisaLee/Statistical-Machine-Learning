@@ -1,0 +1,167 @@
+---
+title: "Statistical Machine Learning - HW9"
+author: "Kun Hee (Lisa) Lee (andrewID: kunheel)"
+format:
+  pdf:
+    number-sections: true
+    fig-cap: true
+    colorlinks: true
+    indent: true
+    linestretch: 1.15
+    fontsize: 12pt
+    geometry: "left=1in, right=1in, top=1in, bottom=1in"
+---
+
+# Mixture Models
+
+```{r, message=FALSE}
+library(mixtools)
+library(MASS)
+
+set.seed(1)
+n <- 1300
+Sigma1 <- matrix(c(1, 0.5, 0.5, 1), nrow = 2)
+Sigma2 <- matrix(c(1, -0.9, -0.9, 1), nrow = 2)
+Sigma3 <- Sigma1
+x1 <- mvrnorm(500, mu = c(0, 0), Sigma = Sigma1)
+x2 <- mvrnorm(500, mu = c(4, 1), Sigma = Sigma2)  
+x3 <- mvrnorm(300, mu = c(8, 1), Sigma = Sigma3)
+y1 <- matrix(1, 500, 1)
+y2 <- matrix(2, 500, 1)
+y3 <- matrix(3, 300, 1) 
+x <- rbind(x1, x2, x3)
+y <- rbind(y1, y2, y3)
+```
+
+
+## (a)
+```{r}
+#Fit GMM
+gmm_fit <- mvnormalmixEM(x, k=3) 
+
+#Hard clustering
+hard_cluster <- apply(gmm_fit$posterior, 1, which.max)
+
+#Plot
+par(mfrow=c(1,2))
+plot(x, pch = 19, col = y, main="True Cluster")
+plot(x, pch = 19, col = hard_cluster, main="GMM Hard Cluster")
+
+```
+
+
+## (b)
+```{r}
+#Define unsure points 
+max_post <- apply(gmm_fit$posterior, 1, max)
+unsure <- which(max_post <= 0.75)
+
+#Plot
+plot(x, pch = 19, col = "grey", main = "Unsure Points")
+points(x[unsure, ], col = "pink", pch = 19)
+legend("topright", legend = c("Unsure"), col=c("pink"), pch = 19)
+```
+
+
+# Spectral Clustering and Tuning Parameters
+
+```{r}
+set.seed(0)
+# Each cluster has n points, in total the data will have 2*n points
+n <- 200 
+
+t1 <- runif(n)
+X1 <- cbind(sin(2*pi*t1), cos(2*pi*t1)) + matrix(rnorm(2*n), ncol = 2)*0.1
+
+t2 <- runif(n)
+X2 <- 3*cbind(sin(2*pi*t2), cos(2*pi*t2)) + matrix(rnorm(2*n), ncol = 2)*0.1
+
+X <- rbind(X1, X2)
+plot(X, col = c(rep("firebrick4", n), rep("royalblue3", n)), pch = 16, 
+     xlab = "", ylab = "")
+```
+
+
+## (a)
+```{r}
+library(rdist)
+dist.matrix <- as.matrix(rdist(X)) # Pairwise Euclidean distance
+
+sigma <- 0.4
+
+# Adjacency matrix  
+W <- exp(-dist.matrix^2 / sigma^2)
+diag(W) <- 0
+  
+# Degree matrix
+D <- diag(rowSums(W))
+
+# Graph Laplacian
+L <- D - W
+
+# The second smallest eigenvector
+v2 <- eigen(L)$vectors[, 2*n-1]
+
+plot(v2)
+```
+
+After trying with several different $\sigma$ values, I found that when $\sigma = 0.4$,
+the clustering seems clear. 
+
+## (b)
+```{r}
+sigmas <- c(0.04, 0.4, 4)
+
+par(mfrow = c(1, 3))
+for (s in sigmas) {
+  W <- exp(-dist.matrix^2 / s^2)
+  diag(W) <- 0
+  D <- diag(rowSums(W))
+  L <- D - W
+  v2 <- eigen(L)$vectors[, 2*n-1]
+  plot(v2, main = paste("σ =", s), ylab = "v2", pch = 16)
+}
+
+```
+
+
+## (c)
+```{r}
+library(ggplot2)
+
+sigmas <- c(0.04, 0.4, 4)
+for (s in sigmas) {
+  W <- exp(-dist.matrix^2 / s^2)
+  diag(W) <- 0
+  
+  df <- data.frame('Weights' = c(as.vector(W[1:n, (n+1):(2*n)]), 
+                               W[1:n, 1:n][upper.tri(diag(n))], 
+                               W[(n+1):(2*n), (n+1):(2*n)][upper.tri(diag(n))]), 
+                 'Group' = c(rep(1, n^2), rep(2, n*(n-1)/2), rep(3, n*(n-1)/2)))
+  df$Group <- factor(df$Group, 
+                   labels = c("Inner-outer", "Inner-inner", "Outer-outer"))
+  
+  box <- ggplot(df, aes(x = Group, y = Weights, fill = Group)) + 
+    geom_boxplot() +
+    scale_fill_manual(values = c("mediumpurple3", "firebrick4", "royalblue3")) + 
+    theme(axis.title.x = element_blank(), legend.title = element_blank()) +
+    labs(title = paste0("Edge Weights for σ = ", s), y = "Edge Weight")
+  
+  print(box)
+}
+
+```
+
+The boxplots above show the distribution of edge weights for between- and 
+within-cluster connections across each value of $\sigma$.
+
+When $\sigma = 0.4$, which we identified as the optimal value, the weights within clusters (both Inner-inner and Outer-outer) span up to nearly 1, though the interquartile range is still close to 0. In contrast, the weights for between-cluster connections (Inner-outer) remain relatively low.
+
+When $\sigma$ is too small ($\sigma = 0.04$), the weights across all groups are very small. This suggests that the within-cluster connections are weak.
+
+Lastly, when $\sigma$ is too big ($\sigma = 4$), the weights are high for all groups, both within and between clusters. This suggests that it is difficult to distinguish clusters.
+
+Based on my understanding, the optimal cluster should result in high weights for
+within-cluster edges and low weights for between-cluster edges. This separation
+will helps spectral clustering clearly identify cluster structure. I can conclude
+that the boxplots above support this intuition.

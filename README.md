@@ -28,3 +28,4 @@ Each assignment provided hands-on experience in:
 - HW6: Boosting and Implementing AdaBoost
 - HW7: PCA for Character Recognition
 - HW8: k-means, k-means on Tumor Biopsies, Hierarchical Clustering
+- HW9: Mixture Models, Spectral Clustering (w. tuning parameters)
